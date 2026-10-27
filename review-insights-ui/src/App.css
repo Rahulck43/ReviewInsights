@@ -449,6 +449,30 @@ td {
   font-size: 11px;
 }
 
+.submit-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.submit-error {
+  color: #dc2626;
+  font-size: 13px;
+  text-align: right;
+}
+
+@media (max-width: 600px) {
+  .submit-actions {
+    align-items: flex-end;
+    flex-direction: column;
+  }
+
+  .submit-error {
+    text-align: right;
+  }
+}
+
 @media (max-width: 760px) {
   .topbar {
     height: 62px;

@@ -22,6 +22,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [submitError, setSubmitError] = useState('')
 
   useEffect(() => {
     async function fetchReviews() {
@@ -58,7 +59,7 @@ function App() {
 
     try {
       setSubmitting(true)
-      setError('')
+      setSubmitError('')
 
       const response = await fetch(`${API_BASE_URL}/api/reviews`, {
         method: 'POST',
@@ -69,7 +70,16 @@ function App() {
       })
 
       if (!response.ok) {
-        throw new Error('Failed to analyze the review. Please try again.')
+        const data = await response.json().catch(() => null)
+
+        const message =
+          data?.errors
+            ? Object.values(data.errors).flat().join(' ')
+            : data?.detail || data?.title || data?.message ||
+            'Failed to analyze the review.'
+
+        setSubmitError(message)
+        return
       }
 
       const newReview: Review = await response.json()
@@ -77,7 +87,7 @@ function App() {
       setReviews((current) => [newReview, ...current])
       setReviewText('')
     } catch (err) {
-      setError(
+      setSubmitError(
         err instanceof Error ? err.message : 'Something went wrong.',
       )
     } finally {
@@ -99,7 +109,7 @@ function App() {
   ).length
 
   function sentimentClass(sentiment: Sentiment) {
-    return `badge badge-${sentiment.toLowerCase()}`
+    return `badge badge-${sentiment?.toLowerCase()}`
   }
 
   return (
@@ -171,7 +181,10 @@ function App() {
             <textarea
               id="reviewText"
               value={reviewText}
-              onChange={(event) => setReviewText(event.target.value)}
+              onChange={(event) => {
+                setReviewText(event.target.value)
+                setSubmitError('')
+              }}
               placeholder="e.g. I love the new dashboard, but the app is slow when loading reports..."
               maxLength={5000}
               rows={4}
@@ -179,9 +192,22 @@ function App() {
 
             <div className="form-footer">
               <span>{reviewText.length}/5000 characters</span>
-              <button type="submit" disabled={!reviewText.trim() || submitting}>
-                <span>✦</span> {submitting ? 'Analyzing...' : 'Add review'}
-              </button>
+
+              <div className="submit-actions">
+                {submitError && (
+                  <span className="submit-error" role="alert">
+                    {submitError}
+                  </span>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={!reviewText.trim() || submitting || Boolean(submitError)}
+                >
+                  <span>✦</span>
+                  {submitting ? 'Analyzing...' : 'Add review'}
+                </button>
+              </div>
             </div>
           </form>
           <p className="demo-note">
