@@ -1,5 +1,5 @@
 
-import { useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import './App.css'
 
 type Sentiment = 'Positive' | 'Neutral' | 'Negative'
@@ -13,54 +13,76 @@ type Review = {
   createdAt: string
 }
 
-const sampleReviews: Review[] = [
-  {
-    id: '1',
-    reviewText: 'The app is easy to use, but it crashes whenever I upload a photo.',
-    sentiment: 'Negative',
-    category: 'Bug',
-    summary: 'App crashes when uploading photos.',
-    createdAt: '2026-10-27T14:49:18',
-  },
-  {
-    id: '2',
-    reviewText: 'The checkout process is simple and the payment was quick.',
-    sentiment: 'Positive',
-    category: 'Usability',
-    summary: 'Checkout is simple and payments are fast.',
-    createdAt: '2026-10-27T14:40:00',
-  },
-  {
-    id: '3',
-    reviewText: 'The subscription is too expensive for the features offered.',
-    sentiment: 'Negative',
-    category: 'Pricing',
-    summary: 'Subscription price is high for available features.',
-    createdAt: '2026-10-27T14:30:00',
-  },
-]
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
 function App() {
   const [reviewText, setReviewText] = useState('')
-  const [reviews, setReviews] = useState(sampleReviews)
+  const [reviews, setReviews] = useState<Review[]>([])
   const [filter, setFilter] = useState('All')
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  useEffect(() => {
+    async function fetchReviews() {
+      try {
+        setLoading(true)
+        setError('')
 
-    if (!reviewText.trim()) return
+        const response = await fetch(`${API_BASE_URL}/api/reviews`)
 
-    const newReview: Review = {
-      id: crypto.randomUUID(),
-      reviewText: reviewText.trim(),
-      sentiment: 'Neutral',
-      category: 'Pending analysis',
-      summary: 'Connect the API to analyze this review.',
-      createdAt: new Date().toISOString(),
+        if (!response.ok) {
+          throw new Error('Failed to load reviews.')
+        }
+
+        const data: Review[] = await response.json()
+        setReviews(data)
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : 'Something went wrong.',
+        )
+      } finally {
+        setLoading(false)
+      }
     }
 
-    setReviews((current) => [newReview, ...current])
-    setReviewText('')
+    fetchReviews()
+  }, [])
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const text = reviewText.trim()
+
+    if (!text || submitting) return
+
+    try {
+      setSubmitting(true)
+      setError('')
+
+      const response = await fetch(`${API_BASE_URL}/api/reviews`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reviewText: text }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to analyze the review. Please try again.')
+      }
+
+      const newReview: Review = await response.json()
+
+      setReviews((current) => [newReview, ...current])
+      setReviewText('')
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Something went wrong.',
+      )
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const filteredReviews =
@@ -157,8 +179,8 @@ function App() {
 
             <div className="form-footer">
               <span>{reviewText.length}/5000 characters</span>
-              <button type="submit" disabled={!reviewText.trim()}>
-                <span>✦</span> Add review
+              <button type="submit" disabled={!reviewText.trim() || submitting}>
+                <span>✦</span> {submitting ? 'Analyzing...' : 'Add review'}
               </button>
             </div>
           </form>
@@ -186,6 +208,8 @@ function App() {
             </select>
           </div>
 
+          {loading && <p>Loading reviews...</p>}
+          {error && <p role="alert">{error}</p>}
           <div className="table-wrapper">
             <table>
               <thead>
