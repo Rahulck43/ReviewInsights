@@ -4,37 +4,46 @@ using ReviewInsights.Api.DTOs;
 
 namespace ReviewInsights.Api.Services;
 
-public class GeminiReviewAnalysisService
+public class GeminiReviewAnalysisService : IReviewAnalysisService
 {
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
+    private readonly ILogger<GeminiReviewAnalysisService> _logger;
 
     public GeminiReviewAnalysisService(
         HttpClient httpClient,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ILogger<GeminiReviewAnalysisService> logger)
     {
         _httpClient = httpClient;
         _configuration = configuration;
+        _logger = logger;
     }
 
     public async Task<ReviewAnalysisResult> AnalyzeAsync(
         string reviewText,
         CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation("Starting review analysis for text with length: {Length}", reviewText.Length);
+        
         var apiKey = _configuration["Gemini:ApiKey"];
         var model = _configuration["Gemini:Model"];
 
         if (string.IsNullOrWhiteSpace(apiKey))
         {
+            _logger.LogError("Gemini API key is missing from configuration");
             throw new InvalidOperationException(
-                "Gemini API key is missing. Configure Gemini:ApiKey.");
+          "Gemini API key is missing. Configure Gemini:ApiKey.");
         }
 
         if (string.IsNullOrWhiteSpace(model))
         {
+            _logger.LogError("Gemini model is missing from configuration");
             throw new InvalidOperationException(
                 "Gemini model is missing from configuration.");
         }
+        
+        _logger.LogDebug("Using Gemini model: {Model}", model);
 
         var requestBody = new
         {
@@ -115,15 +124,20 @@ public class GeminiReviewAnalysisService
         request.Headers.Add("x-goog-api-key", apiKey);
         request.Content = JsonContent.Create(requestBody);
 
+        _logger.LogDebug("Sending request to Gemini API");
+        
         using var response = await _httpClient.SendAsync(
             request, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
+            _logger.LogError("Gemini API returned error status code: {StatusCode}", response.StatusCode);
             // Do not include the API key in error messages.
             throw new HttpRequestException(
                 $"Gemini API returned HTTP {(int)response.StatusCode}.");
         }
+        
+        _logger.LogDebug("Received successful response from Gemini API");
 
         using var document = JsonDocument.Parse(
             await response.Content.ReadAsStringAsync(cancellationToken));
@@ -137,9 +151,12 @@ public class GeminiReviewAnalysisService
 
         if (string.IsNullOrWhiteSpace(jsonText))
         {
+            _logger.LogError("Gemini returned empty analysis text");
             throw new InvalidOperationException(
                 "Gemini returned an empty analysis.");
         }
+        
+        _logger.LogDebug("Parsing Gemini response JSON");
 
         var result =
             JsonSerializer.Deserialize<ReviewAnalysisResult>(
@@ -159,9 +176,13 @@ public class GeminiReviewAnalysisService
             }.Contains(result.Category) ||
             string.IsNullOrWhiteSpace(result.Summary))
         {
+            _logger.LogError("Gemini returned invalid analysis result");
             throw new InvalidOperationException(
                 "Gemini returned an invalid analysis.");
         }
+        
+        _logger.LogInformation("Successfully analyzed review. Sentiment: {Sentiment}, Category: {Category}", 
+            result.Sentiment, result.Category);
 
         // Enforce the summary limit in our application too.
         var words = result.Summary.Split(
@@ -169,6 +190,8 @@ public class GeminiReviewAnalysisService
             StringSplitOptions.RemoveEmptyEntries);
 
         result.Summary = string.Join(" ", words.Take(10));
+        
+        _logger.LogDebug("Trimmed summary to {WordCount} words", words.Take(10).Count());
 
         return result;
     }

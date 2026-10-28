@@ -2,7 +2,7 @@
 
 public class Review
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid Id { get; set; }
 
     public string ReviewText { get; set; } = string.Empty;
 
@@ -12,5 +12,5 @@ public class Review
 
     public string Summary { get; set; } = string.Empty;
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; }
 }

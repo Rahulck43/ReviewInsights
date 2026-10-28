@@ -1,51 +1,76 @@
-﻿using Microsoft.EntityFrameworkCore;
-using ReviewInsights.Api.Data;
-using ReviewInsights.Api.DTOs;
-using ReviewInsights.Api.Models;
+﻿using ReviewInsights.Api.Models;
+using ReviewInsights.Api.Repositories;
 
 namespace ReviewInsights.Api.Services;
 
-public class ReviewService
+public class ReviewService : IReviewService
 {
-    private readonly AppDbContext _context;
-    private readonly GeminiReviewAnalysisService _geminiService;
+    private readonly IReviewRepository _reviewRepository;
+    private readonly IReviewAnalysisService _analysisService;
+    private readonly ILogger<ReviewService> _logger;
 
-    public ReviewService(AppDbContext context,
-        GeminiReviewAnalysisService geminiService)
+    public ReviewService(
+        IReviewRepository reviewRepository,
+        IReviewAnalysisService analysisService,
+        ILogger<ReviewService> logger)
     {
-        _context = context;
-        _geminiService = geminiService;
+        _reviewRepository = reviewRepository;
+        _analysisService = analysisService;
+        _logger = logger;
     }
 
     public async Task<List<Review>> GetAllAsync()
     {
-        return await _context.Reviews
-            .AsNoTracking()
-            .OrderByDescending(r => r.CreatedAt)
-            .ToListAsync();
+        _logger.LogInformation("Retrieving all reviews");
+        
+        try
+        {
+            var reviews = await _reviewRepository.GetAllAsync();
+            _logger.LogInformation("Successfully retrieved {Count} reviews", reviews.Count);
+            return reviews;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to retrieve reviews");
+            throw;
+        }
     }
 
     public async Task<Review> CreateAsync(
         string reviewText,
         CancellationToken cancellationToken = default)
     {
-        // 1. Analyze the review using Gemini.
-        var analysis = await _geminiService.AnalyzeAsync(
-            reviewText, cancellationToken);
-
-        // 2. Save the original review and AI results together.
-        var review = new Review
+        _logger.LogInformation("Creating new review with text length: {Length}", reviewText.Length);
+        
+        try
         {
-            ReviewText = reviewText,
-            Sentiment = analysis.Sentiment,
-            Category = analysis.Category,
+            // 1. Analyze the review using AI service
+            _logger.LogDebug("Starting AI analysis for review");
+            var analysis = await _analysisService.AnalyzeAsync(
+                reviewText, cancellationToken);
+
+            // 2. Create review entity with AI analysis results
+            var review = new Review
+            {
+                Id = Guid.NewGuid(),
+                ReviewText = reviewText,
+                Sentiment = analysis.Sentiment,
+                Category = analysis.Category,
             Summary = analysis.Summary,
-            CreatedAt = DateTime.UtcNow
-        };
+                CreatedAt = DateTime.UtcNow
+            };
 
-        _context.Reviews.Add(review);
-        await _context.SaveChangesAsync(cancellationToken);
+            // 3. Persist to database through repository
+            _logger.LogDebug("Saving review to database");
+            var savedReview = await _reviewRepository.AddAsync(review, cancellationToken);
 
-        return review;
+            _logger.LogInformation("Successfully created review with ID: {ReviewId}", savedReview.Id);
+            return savedReview;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to create review");
+            throw;
+        }
     }
 }
