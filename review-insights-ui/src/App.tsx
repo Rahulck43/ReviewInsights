@@ -138,7 +138,6 @@ function App() {
               Understand what your customers are saying, at a glance.
             </p>
           </div>
-          <div className="demo-label">DEMO DATA</div>
         </div>
 
         <section className="stats-grid">
@@ -210,9 +209,6 @@ function App() {
               </div>
             </div>
           </form>
-          <p className="demo-note">
-            Demo mode: live AI analysis will be connected in the next step.
-          </p>
         </section>
 
         <section className="panel reviews-panel">
